@@ -39,13 +39,13 @@ const CANDIDATES = [
       {
         empresa: 'Startup Pix',
         cargo: 'Desenvolvedora Full Stack',
-        inicio: '2022',
-        fim: 'atual',
+        inicio: '2022-03',
+        fim: '',
         descricao: 'Desenvolvimento de dashboards em React e APIs REST em Node.js.',
       },
     ],
     education: [
-      { instituicao: 'Universidade Federal do ABC', curso: 'Ciência da Computação', conclusao: '2021' },
+      { instituicao: 'Universidade Federal do ABC', curso: 'Ciência da Computação', conclusao: '2021-12' },
     ],
   },
   {
@@ -61,13 +61,13 @@ const CANDIDATES = [
       {
         empresa: 'Agência Mineira',
         cargo: 'Estagiário de Desenvolvimento',
-        inicio: '2023',
-        fim: '2024',
+        inicio: '2023-02',
+        fim: '2024-08',
         descricao: 'Manutenção de sistemas internos em Django.',
       },
     ],
     education: [
-      { instituicao: 'PUC Minas', curso: 'Sistemas de Informação', conclusao: '2024' },
+      { instituicao: 'PUC Minas', curso: 'Sistemas de Informação', conclusao: '2024-12' },
     ],
   },
 ];
