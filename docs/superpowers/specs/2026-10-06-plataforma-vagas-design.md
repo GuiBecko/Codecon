@@ -15,7 +15,7 @@ Contexto: hackathon Codecon, prazo curto. Critério de sucesso: demo funcionando
 ## 2. Stack e arquitetura
 
 Monólito Node.js único:
-- **Backend:** Express, `better-sqlite3`, `bcrypt`, `express-session` (cookie `httpOnly`, `sameSite=lax`).
+- **Backend:** Express, `better-sqlite3`, `bcryptjs`, `express-session` (cookie `httpOnly`, `sameSite=lax`).
 - **Frontend:** SPA em HTML + CSS + JavaScript puro (ES modules nativos, sem build), servida como estático pelo Express. Roteamento por hash.
 - **Banco:** SQLite em arquivo (`data/app.db`; `DB_PATH` configurável, `:memory:` nos testes).
 - **Deploy:** um único serviço (Render/Railway).
@@ -105,7 +105,7 @@ Todas sob `/api`, JSON. Erro sempre como `{ "error": "mensagem" }`.
 | POST | `/company/jobs/:id/close` | `{applicationId}`; 403 vaga de outra empresa; 400 vaga já fechada ou candidatura de outra vaga |
 
 ### Segurança
-bcrypt (custo 10), sessão em cookie httpOnly + sameSite=lax, `SESSION_SECRET` via env (fallback só em dev), queries sempre parametrizadas, checagem de propriedade em toda rota de empresa.
+bcryptjs (custo 10), sessão em cookie httpOnly + sameSite=lax, `SESSION_SECRET` via env (fallback só em dev), queries sempre parametrizadas, checagem de propriedade em toda rota de empresa.
 
 ## 5. Telas (SPA)
 
