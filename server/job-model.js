@@ -47,3 +47,40 @@ export function parseJobInput(body) {
   }
   return job;
 }
+
+const isEmpty = (v) => v === undefined || v === null || v === '';
+
+export function parseJobFilters(query) {
+  query = query ?? {};
+  const q = text(query.q, 'Busca', { max: 120 });
+  const seniority = oneOf(query.seniority, SENIORITIES, 'Senioridade', { required: false });
+  let salaryMin = null;
+  if (!isEmpty(query.salaryMin)) {
+    salaryMin = nonNegativeInt(query.salaryMin, 'Salário mínimo');
+  }
+  let company = null;
+  if (!isEmpty(query.company)) {
+    if (typeof query.company !== 'string' || !/^\d+$/.test(query.company) || Number(query.company) <= 0) {
+      throw new HttpError(400, 'Empresa inválida');
+    }
+    company = Number(query.company);
+  }
+  const tech = normalizeTechs(query.tech);
+  return { q, seniority, salaryMin, tech, company };
+}
+
+function fold(str) {
+  return str.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
+
+export function filterJobs(jobs, filters) {
+  const q = filters.q ? fold(filters.q) : '';
+  return jobs.filter((job) => {
+    if (q && !fold(job.title).includes(q)) return false;
+    if (filters.seniority && job.seniority !== filters.seniority) return false;
+    if (filters.salaryMin !== null && filters.salaryMin !== undefined && job.salaryMax < filters.salaryMin) return false;
+    if (filters.company !== null && filters.company !== undefined && job.companyId !== filters.company) return false;
+    if (filters.tech?.length && !filters.tech.every((t) => job.technologies.includes(t))) return false;
+    return true;
+  });
+}
