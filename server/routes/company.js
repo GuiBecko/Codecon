@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireRole } from '../middleware/auth.js';
-import { HttpError, techsToCsv } from '../validation.js';
+import { HttpError, parseId, techsToCsv } from '../validation.js';
+import { profileFromRow } from '../profile-model.js';
 import { JOB_SELECT, jobFromRow, parseJobInput } from '../job-model.js';
 
 export function companyRouter(db) {
@@ -45,6 +46,66 @@ export function companyRouter(db) {
       applicationsCount: r.applications_count,
       hiredCandidateName: r.hired_candidate_name ?? null,
     })));
+  });
+
+  const findOwnJob = (rawId, companyId) => {
+    let id;
+    try {
+      id = parseId(rawId);
+    } catch {
+      throw new HttpError(404, 'Vaga não encontrada');
+    }
+    const job = getJob(id);
+    if (!job) throw new HttpError(404, 'Vaga não encontrada');
+    if (job.companyId !== companyId) throw new HttpError(403, 'Esta vaga pertence a outra empresa');
+    return job;
+  };
+
+  router.get('/jobs/:id/applications', (req, res) => {
+    const job = findOwnJob(req.params.id, req.user.id);
+    const rows = db.prepare(`
+      SELECT a.id AS application_id, a.status AS application_status, a.created_at AS application_created_at, k.*
+      FROM applications a
+      JOIN candidates k ON k.user_id = a.candidate_id
+      WHERE a.job_id = ?
+      ORDER BY a.created_at ASC, a.id ASC
+    `).all(job.id);
+    res.json({
+      job,
+      applications: rows.map((r) => ({
+        id: r.application_id,
+        status: r.application_status,
+        createdAt: r.application_created_at,
+        candidate: profileFromRow(r),
+      })),
+    });
+  });
+
+  router.post('/jobs/:id/close', (req, res) => {
+    const job = findOwnJob(req.params.id, req.user.id);
+    if (job.status !== 'open') throw new HttpError(400, 'Esta vaga já está fechada');
+
+    const raw = (req.body ?? {}).applicationId;
+    const applicationId = typeof raw === 'number' ? raw
+      : typeof raw === 'string' && /^\d+$/.test(raw) ? Number(raw) : NaN;
+    if (!Number.isSafeInteger(applicationId) || applicationId <= 0) {
+      throw new HttpError(400, 'Selecione a candidatura a ser aprovada');
+    }
+    const application = db.prepare('SELECT id FROM applications WHERE id = ? AND job_id = ?')
+      .get(applicationId, job.id);
+    if (!application) throw new HttpError(400, 'Esta candidatura não pertence a esta vaga');
+
+    db.transaction(() => {
+      const updated = db.prepare(`
+        UPDATE jobs SET status = 'closed', hired_application_id = ? WHERE id = ? AND status = 'open'
+      `).run(applicationId, job.id);
+      if (updated.changes !== 1) throw new HttpError(400, 'Esta vaga já está fechada');
+      db.prepare("UPDATE applications SET status = 'aprovado' WHERE id = ?").run(applicationId);
+      db.prepare("UPDATE applications SET status = 'nao_selecionado' WHERE job_id = ? AND id <> ?")
+        .run(job.id, applicationId);
+    })();
+
+    res.json(getJob(job.id));
   });
 
   return router;
