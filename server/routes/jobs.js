@@ -3,6 +3,7 @@ import { requireRole } from '../middleware/auth.js';
 import { HttpError, parseId } from '../validation.js';
 import { profileFromRow } from '../profile-model.js';
 import { JOB_SELECT, jobFromRow, parseJobFilters, filterJobs } from '../job-model.js';
+import { matchJobs } from '../match.js';
 
 export function jobsRouter(db) {
   const router = Router();
@@ -30,6 +31,17 @@ export function jobsRouter(db) {
     const applied = appliedJobIds(req.user.id);
     const jobs = filterJobs(rows.map(jobFromRow), filters);
     res.json(jobs.map((job) => ({ ...job, alreadyApplied: applied.has(job.id) })));
+  });
+
+    router.get('/matches', (req, res) => {
+    const profile = profileFromRow(
+      db.prepare('SELECT * FROM candidates WHERE user_id = ?').get(req.user.id),
+    );
+    const rows = db.prepare(`${JOB_SELECT} WHERE j.status = 'open'`).all();
+    const applied = appliedJobIds(req.user.id);
+
+    const matches = matchJobs(profile.technologies, rows.map(jobFromRow));
+    res.json(matches.map((job) => ({ ...job, alreadyApplied: applied.has(job.id) })));
   });
 
   router.get('/:id', (req, res) => {

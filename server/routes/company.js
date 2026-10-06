@@ -3,6 +3,7 @@ import { requireRole } from '../middleware/auth.js';
 import { HttpError, parseId, techsToCsv } from '../validation.js';
 import { profileFromRow } from '../profile-model.js';
 import { JOB_SELECT, jobFromRow, parseJobInput } from '../job-model.js';
+import { rankApplications } from '../match.js';
 
 export function companyRouter(db) {
   const router = Router();
@@ -25,6 +26,7 @@ export function companyRouter(db) {
     );
     res.status(201).json(getJob(Number(lastInsertRowid)));
   });
+
 
   router.get('/jobs', (req, res) => {
     const status = req.query.status ?? 'open';
@@ -70,17 +72,17 @@ export function companyRouter(db) {
       WHERE a.job_id = ?
       ORDER BY a.created_at ASC, a.id ASC
     `).all(job.id);
+    const applications = rows.map((r) => ({
+      id: r.application_id,
+      status: r.application_status,
+      createdAt: r.application_created_at,
+      candidate: profileFromRow(r),
+    }));
     res.json({
       job,
-      applications: rows.map((r) => ({
-        id: r.application_id,
-        status: r.application_status,
-        createdAt: r.application_created_at,
-        candidate: profileFromRow(r),
-      })),
+      applications: rankApplications(applications, job),
     });
   });
-
   router.post('/jobs/:id/close', (req, res) => {
     const job = findOwnJob(req.params.id, req.user.id);
     if (job.status !== 'open') throw new HttpError(400, 'Esta vaga já está fechada');
