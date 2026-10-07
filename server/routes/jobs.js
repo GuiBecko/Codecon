@@ -33,7 +33,7 @@ export function jobsRouter(db) {
     res.json(jobs.map((job) => ({ ...job, alreadyApplied: applied.has(job.id) })));
   });
 
-    router.get('/matches', (req, res) => {
+  router.get('/matches', (req, res) => {
     const profile = profileFromRow(
       db.prepare('SELECT * FROM candidates WHERE user_id = ?').get(req.user.id),
     );
