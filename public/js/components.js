@@ -1,6 +1,6 @@
 // Componentes de UI que retornam strings HTML. Todo dado dinâmico passa por escapeHtml.
 import {
-  escapeHtml, label, formatSalaryRange, formatRelative, formatMonth, initials,
+  escapeHtml, label, formatSalaryRange, formatRelative, formatMonth, initials, formatLocation, formatBytes, formatDate,
   SENIORITY_LABELS, WORK_MODEL_LABELS, APPLICATION_STATUS_LABELS, JOB_STATUS_LABELS,
 } from './ui.js';
 
@@ -13,6 +13,9 @@ const ICONS = {
   phone: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg>',
   link: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>',
   users: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg>',
+  file: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6"/></svg>',
+  download: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5M12 15V3"/></svg>',
+  upload: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5M12 3v12"/></svg>',
   chevron: '<svg class="caret" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>',
 };
 
@@ -93,12 +96,32 @@ export function jobCard(job, { href, actions = '', footer, showCompany = true } 
   </article>`;
 }
 
-/** Currículo completo para a visão da empresa. */
+/** Período de uma experiência: "mar/2022 → atual" / "mar/2020 → dez/2021". */
+export function experiencePeriod(e = {}) {
+  const a = formatMonth(e.inicio);
+  // legado: sem o campo `atual`, fim vazio significava emprego atual
+  const current = e.atual === true || (e.atual === undefined && !e.fim && Boolean(e.inicio));
+  const b = current ? 'atual' : formatMonth(e.fim);
+  if (a && b) return `${a} → ${b}`;
+  if (a) return `desde ${a}`;
+  return b && !current ? `até ${b}` : (current ? 'atual' : '');
+}
+
+/** Situação de uma formação: "Concluído em dez/2021" / "Em andamento · previsão jun/2027". */
+export function educationStatus(e = {}) {
+  const when = formatMonth(e.conclusao);
+  if (e.situacao === 'em_andamento') return when ? `Em andamento · previsão ${when}` : 'Em andamento';
+  if (e.situacao === 'concluido') return when ? `Concluído em ${when}` : 'Concluído';
+  return when ? `Conclusão: ${when}` : '';
+}
+
+/** Currículo completo (visão da empresa e "Meu perfil"). */
 export function resumeHtml(p = {}) {
   const contact = [];
-  if (p.email) contact.push(`<span>${ICONS.mail}${escapeHtml(p.email)}</span>`);
+  if (p.email) contact.push(`<a href="mailto:${escapeHtml(p.email)}">${ICONS.mail}${escapeHtml(p.email)}</a>`);
   if (p.phone) contact.push(`<span>${ICONS.phone}${escapeHtml(p.phone)}</span>`);
-  if (p.city) contact.push(`<span>${ICONS.pin}${escapeHtml(p.city)}</span>`);
+  const place = formatLocation(p);
+  if (place) contact.push(`<span>${ICONS.pin}${escapeHtml(place)}</span>`);
   if (p.linkedin) {
     const li = String(p.linkedin);
     contact.push(/^https?:\/\//i.test(li)
@@ -109,12 +132,6 @@ export function resumeHtml(p = {}) {
   const exps = Array.isArray(p.experiences) ? p.experiences : [];
   const edus = Array.isArray(p.education) ? p.education : [];
 
-  const period = (ini, fim) => {
-    const a = formatMonth(ini);
-    const b = fim ? formatMonth(fim) : 'atual';
-    return a ? `${a} – ${b}` : (fim ? formatMonth(fim) : '');
-  };
-
   return `<div class="resume">
     ${contact.length ? `<div class="resume-contact">${contact.join('')}</div>` : ''}
     ${p.technologies && p.technologies.length ? `<div class="resume-section"><div class="section-title">Tecnologias</div>${techChips(p.technologies)}</div>` : ''}
@@ -123,7 +140,7 @@ export function resumeHtml(p = {}) {
       <div class="section-title">Experiências</div>
       ${exps.length ? `<ul class="timeline">${exps.map((e) => `<li>
         <div class="t-title">${escapeHtml(e.cargo || 'Cargo não informado')}${e.empresa ? ` · ${escapeHtml(e.empresa)}` : ''}</div>
-        <div class="t-sub">${escapeHtml(period(e.inicio, e.fim))}</div>
+        <div class="t-sub">${escapeHtml(experiencePeriod(e))}</div>
         ${e.descricao ? `<div class="t-desc">${escapeHtml(e.descricao)}</div>` : ''}
       </li>`).join('')}</ul>` : '<p class="muted small">Nenhuma experiência informada.</p>'}
     </div>
@@ -131,9 +148,30 @@ export function resumeHtml(p = {}) {
       <div class="section-title">Formação</div>
       ${edus.length ? `<ul class="timeline">${edus.map((e) => `<li>
         <div class="t-title">${escapeHtml(e.curso || 'Curso não informado')}</div>
-        <div class="t-sub">${escapeHtml([e.instituicao, e.conclusao ? `Conclusão: ${formatMonth(e.conclusao)}` : ''].filter(Boolean).join(' · '))}</div>
+        <div class="t-sub">${escapeHtml([e.instituicao, educationStatus(e)].filter(Boolean).join(' · '))}</div>
       </li>`).join('')}</ul>` : '<p class="muted small">Nenhuma formação informada.</p>'}
     </div>
   </div>`;
 }
 
+/**
+ * Linha do PDF anexado. `pdf` = {name, size, uploadedAt}.
+ * @param opts.href link de download
+ * @param opts.downloadText texto do link
+ * @param opts.removable mostra o botão "Remover" (data-pdf-remove)
+ */
+export function attachedPdfHtml(pdf, { href, downloadText = 'Baixar', removable = false } = {}) {
+  if (!pdf) return '';
+  const meta = [formatBytes(pdf.size), pdf.uploadedAt ? `enviado em ${formatDate(pdf.uploadedAt)}` : ''].filter(Boolean).join(' · ');
+  return `<div class="file-row">
+    <span class="file-icon">${ICONS.file}</span>
+    <div class="file-info">
+      <strong title="${escapeHtml(pdf.name)}">${escapeHtml(pdf.name || 'curriculo.pdf')}</strong>
+      ${meta ? `<span>${escapeHtml(meta)}</span>` : ''}
+    </div>
+    <div class="row">
+      <a class="btn btn-sm" href="${escapeHtml(href)}" download>${ICONS.download}${escapeHtml(downloadText)}</a>
+      ${removable ? '<button type="button" class="btn btn-sm btn-danger-ghost" data-pdf-remove>Remover</button>' : ''}
+    </div>
+  </div>`;
+}

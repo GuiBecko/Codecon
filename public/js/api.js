@@ -15,7 +15,16 @@ export async function api(path, { method = 'GET', body } = {}) {
     init.headers['Content-Type'] = 'application/json';
     init.body = JSON.stringify(body);
   }
+  return request(path, init);
+}
 
+/** Envia multipart/form-data (ex.: upload de PDF). Mesmo tratamento de erro/401 de api(). */
+export async function upload(path, formData, { method = 'PUT' } = {}) {
+  // Sem Content-Type: o navegador define o boundary do multipart.
+  return request(path, { method, credentials: 'same-origin', headers: { Accept: 'application/json' }, body: formData });
+}
+
+async function request(path, init) {
   let res;
   try {
     res = await fetch(`/api${path}`, init);
@@ -46,6 +55,7 @@ function defaultMessage(status) {
   if (status === 401) return 'Sua sessão expirou. Entre novamente.';
   if (status === 403) return 'Você não tem permissão para isso.';
   if (status === 404) return 'Não encontrado.';
+  if (status === 413) return 'Arquivo muito grande.';
   if (status >= 500) return 'Erro no servidor. Tente novamente.';
   return 'Não foi possível concluir a operação.';
 }

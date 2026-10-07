@@ -194,19 +194,24 @@ export async function withButton(button, asyncFn, onError = toast) {
   }
 }
 
-/** Modal de confirmação. Resolve true (confirmar) ou false (cancelar/Esc/fundo). */
-export function confirmModal({ title, message, confirmText = 'Confirmar', cancelText = 'Cancelar', confirmClass = 'btn-primary' } = {}) {
+/**
+ * Base dos modais: monta o diálogo, prende o foco e fecha com Esc/fundo.
+ * `buttons`: [{ text, className, value }]; resolve com o `value` do botão (ou `dismissValue`).
+ */
+function openModal({ title, message, lines = [], buttons, dismissValue, closeOnNav = true }) {
   return new Promise((resolve) => {
     const previousFocus = document.activeElement;
     const backdrop = document.createElement('div');
     backdrop.className = 'modal-backdrop';
     backdrop.innerHTML = `
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal" role="${buttons.length > 1 ? 'dialog' : 'alertdialog'}" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-desc">
         <h2 id="modal-title">${escapeHtml(title)}</h2>
-        <p>${escapeHtml(message)}</p>
+        <div id="modal-desc" class="modal-body">
+          ${message ? `<p>${escapeHtml(message)}</p>` : ''}
+          ${lines.length ? `<ul class="modal-list">${lines.map((l) => `<li>${escapeHtml(l)}</li>`).join('')}</ul>` : ''}
+        </div>
         <div class="form-actions">
-          <button type="button" class="btn btn-ghost" data-cancel>${escapeHtml(cancelText)}</button>
-          <button type="button" class="btn ${escapeHtml(confirmClass)}" data-confirm>${escapeHtml(confirmText)}</button>
+          ${buttons.map((b, i) => `<button type="button" class="btn ${escapeHtml(b.className || '')}" data-modal-btn="${i}">${escapeHtml(b.text)}</button>`).join('')}
         </div>
       </div>`;
 
@@ -218,7 +223,7 @@ export function confirmModal({ title, message, confirmText = 'Confirmar', cancel
       resolve(result);
     };
     const onKey = (e) => {
-      if (e.key === 'Escape') { e.preventDefault(); close(false); }
+      if (e.key === 'Escape') { e.preventDefault(); close(dismissValue); }
       if (e.key === 'Tab') {
         const focusables = backdrop.querySelectorAll('button');
         const first = focusables[0];
@@ -227,18 +232,90 @@ export function confirmModal({ title, message, confirmText = 'Confirmar', cancel
         else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
       }
     };
-    const onNav = () => close(false);
+    const onNav = () => close(dismissValue);
 
     backdrop.addEventListener('click', (e) => {
-      if (e.target === backdrop) close(false);
-      else if (e.target.closest('[data-cancel]')) close(false);
-      else if (e.target.closest('[data-confirm]')) close(true);
+      if (e.target === backdrop) { close(dismissValue); return; }
+      const btn = e.target.closest('[data-modal-btn]');
+      if (btn) close(buttons[Number(btn.dataset.modalBtn)].value);
     });
     document.addEventListener('keydown', onKey, true);
-    window.addEventListener('hashchange', onNav);
+    if (closeOnNav) window.addEventListener('hashchange', onNav);
     document.body.appendChild(backdrop);
-    backdrop.querySelector('[data-confirm]').focus();
+    const all = backdrop.querySelectorAll('[data-modal-btn]');
+    all[all.length - 1].focus();
   });
+}
+
+/** Modal de confirmação. Resolve true (confirmar) ou false (cancelar/Esc/fundo). */
+export function confirmModal({ title, message, confirmText = 'Confirmar', cancelText = 'Cancelar', confirmClass = 'btn-primary' } = {}) {
+  return openModal({
+    title,
+    message,
+    dismissValue: false,
+    buttons: [
+      { text: cancelText, className: 'btn-ghost', value: false },
+      { text: confirmText, className: confirmClass, value: true },
+    ],
+  });
+}
+
+/**
+ * Modal informativo com um único botão OK. `lines` vira uma lista abaixo da mensagem.
+ * Não fecha ao navegar (pode ser aberto logo após um go()).
+ */
+export function alertModal({ title, message = '', lines = [], okText = 'OK' } = {}) {
+  return openModal({
+    title,
+    message,
+    lines,
+    dismissValue: undefined,
+    closeOnNav: false,
+    buttons: [{ text: okText, className: 'btn-primary', value: undefined }],
+  });
+}
+
+/** Tamanho de arquivo legível ("820 KB", "1,2 MB"). */
+export function formatBytes(bytes) {
+  const n = Number(bytes);
+  if (!Number.isFinite(n) || n < 0) return '';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1).replace('.', ',')} MB`;
+}
+
+function isBrazilCountry(country) {
+  const c = String(country ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+  return c === '' || c === 'brasil' || c === 'brazil';
+}
+
+/** Localização legível: "São Paulo - SP" (Brasil) ou "Lisboa, Portugal". */
+export function formatLocation({ city, state, country } = {}) {
+  const c = String(city || '').trim();
+  const s = String(state || '').trim();
+  if (isBrazilCountry(country)) {
+    if (c && s) {
+      const already = /^[a-z]{2}$/i.test(s) && new RegExp(`[-/,]\\s*${s}$`, 'i').test(c);
+      return already ? c : `${c} - ${s}`;
+    }
+    return c || s;
+  }
+  return [c, s, String(country || '').trim()].filter(Boolean).join(', ');
+}
+
+/** O que falta para o perfil ser considerado completo (nome, senioridade, 1+ tecnologia). */
+export function missingProfileFields(p = {}) {
+  const missing = [];
+  if (!String(p.fullName || '').trim()) missing.push('Nome completo');
+  if (!p.seniority) missing.push('Senioridade');
+  if (!Array.isArray(p.technologies) || !p.technologies.length) missing.push('Pelo menos uma tecnologia');
+  return missing;
+}
+
+/** Slug ASCII para nomes de arquivo. */
+export function slugify(value) {
+  return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
 }
 
 /** Debounce simples. */

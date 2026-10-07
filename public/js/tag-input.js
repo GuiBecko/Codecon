@@ -26,16 +26,17 @@ export function mountTagInput(root, initial = []) {
   let tags = [];
 
   const render = () => {
-    tagsEl.innerHTML = tags.map((t, i) => `<span class="chip">${escapeHtml(t)}<button type="button" class="tag-remove" data-remove="${i}" aria-label="Remover ${escapeHtml(t)}">×</button></span>`).join('');
+    tagsEl.innerHTML = tags.map((t, i) => `<span class="chip">${escapeHtml(t)}<button type="button" class="tag-remove" data-tag-remove="${i}" aria-label="Remover ${escapeHtml(t)}">×</button></span>`).join('');
   };
 
   const add = (raw) => {
-    let changed = false;
+    let added = 0;
     for (const part of String(raw).split(',')) {
       const tag = normalizeTag(part);
-      if (tag && !tags.includes(tag)) { tags.push(tag); changed = true; }
+      if (tag && !tags.includes(tag)) { tags.push(tag); added++; }
     }
-    if (changed) render();
+    if (added) render();
+    return added;
   };
 
   const commit = () => {
@@ -59,9 +60,10 @@ export function mountTagInput(root, initial = []) {
   input.addEventListener('blur', commit);
 
   box.addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-remove]');
+    const btn = e.target.closest('[data-tag-remove]');
     if (btn) {
-      tags.splice(Number(btn.dataset.remove), 1);
+      e.stopPropagation();
+      tags.splice(Number(btn.dataset.tagRemove), 1);
       render();
       input.focus();
       return;
@@ -76,6 +78,10 @@ export function mountTagInput(root, initial = []) {
     values() {
       commit();
       return [...tags];
+    },
+    /** Adiciona tags (lista ou string separada por vírgulas). Retorna quantas eram novas. */
+    add(list) {
+      return add(Array.isArray(list) ? list.join(',') : String(list ?? ''));
     },
   };
 }

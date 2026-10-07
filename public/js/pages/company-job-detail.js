@@ -1,9 +1,10 @@
 import { api } from '../api.js';
 import { go } from '../session.js';
 import {
-  escapeHtml, label, formatDate, initials, toast, withButton, confirmModal, emptyState, SENIORITY_LABELS,
+  escapeHtml, label, formatDate, formatLocation, initials, toast, withButton, confirmModal, emptyState, SENIORITY_LABELS,
 } from '../ui.js';
-import { jobMeta, techChips, statusBadge, resumeHtml, ICONS } from '../components.js';
+import { jobMeta, techChips, statusBadge, resumeHtml, attachedPdfHtml, ICONS } from '../components.js';
+import { downloadResumePdf } from '../resume-pdf.js';
 
 export async function render(view, { params }) {
   const data = await api(`/company/jobs/${params.id}/applications`);
@@ -45,6 +46,12 @@ export async function render(view, { params }) {
     </div>`;
 
   view.querySelector('[data-list]').addEventListener('click', async (e) => {
+    const gen = e.target.closest('[data-gen-pdf]');
+    if (gen) {
+      const a = apps.find((x) => x.id === Number(gen.dataset.genPdf));
+      if (a) withButton(gen, () => downloadResumePdf({ ...(a.candidate || {}), fullName: nameOf(a) }, a.candidate && a.candidate.email));
+      return;
+    }
     const btn = e.target.closest('[data-hire]');
     if (!btn) return;
     const appId = Number(btn.dataset.hire);
@@ -69,7 +76,7 @@ export async function render(view, { params }) {
 
 function applicantHtml(a, { open, isHired, nameOf }) {
   const c = a.candidate || {};
-  const sub = [label(SENIORITY_LABELS, c.seniority), c.city, `candidatou-se em ${formatDate(a.createdAt)}`].filter(Boolean).join(' · ');
+  const sub = [label(SENIORITY_LABELS, c.seniority), formatLocation(c), `candidatou-se em ${formatDate(a.createdAt)}`].filter(Boolean).join(' · ');
   return `<details class="card applicant${isHired ? ' hired' : ''}"${isHired ? ' open' : ''}>
     <summary>
       <div class="avatar" aria-hidden="true">${escapeHtml(initials(nameOf(a)))}</div>
@@ -81,8 +88,15 @@ function applicantHtml(a, { open, isHired, nameOf }) {
       ${ICONS.chevron}
     </summary>
     <div class="applicant-body">
+      ${c.resumePdf ? attachedPdfHtml(c.resumePdf, {
+        href: `/api/company/applications/${encodeURIComponent(a.id)}/resume-pdf`,
+        downloadText: 'Baixar PDF',
+      }) : ''}
       ${resumeHtml(c)}
-      ${open ? `<div class="form-actions"><button type="button" class="btn btn-success" data-hire="${escapeHtml(a.id)}">Contratar e fechar vaga</button></div>` : ''}
+      <div class="form-actions">
+        <button type="button" class="btn" data-gen-pdf="${escapeHtml(a.id)}">Gerar PDF</button>
+        ${open ? `<button type="button" class="btn btn-success" data-hire="${escapeHtml(a.id)}">Contratar e fechar vaga</button>` : ''}
+      </div>
     </div>
   </details>`;
 }

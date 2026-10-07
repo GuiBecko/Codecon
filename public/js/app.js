@@ -11,6 +11,7 @@ const routes = [
   { pattern: '/vagas', role: 'candidate', load: () => import('./pages/jobs.js') },
   { pattern: '/vagas/:id', role: 'candidate', load: () => import('./pages/job-detail.js') },
   { pattern: '/curriculo', role: 'candidate', load: () => import('./pages/resume.js') },
+  { pattern: '/perfil', role: 'candidate', load: () => import('./pages/profile.js') },
   { pattern: '/minhas-candidaturas', role: 'candidate', load: () => import('./pages/my-applications.js') },
   { pattern: '/empresa/vagas', role: 'company', load: () => import('./pages/company-jobs.js') },
   { pattern: '/empresa/vagas/nova', role: 'company', load: () => import('./pages/job-new.js') },
@@ -48,6 +49,17 @@ function match(path) {
   return null;
 }
 
+/** Avatar + nome. Para candidatos é o atalho para "Meu perfil". */
+function userChip(user, path) {
+  const inner = `<span class="avatar" aria-hidden="true">${escapeHtml(initials(user.name || user.email))}</span>
+        <span id="user-name">${escapeHtml(user.name || user.email || '')}</span>`;
+  if (user.role !== 'candidate') {
+    return `<span class="user-chip" title="${escapeHtml(user.email || '')}">${inner}</span>`;
+  }
+  const active = path === '/perfil';
+  return `<a class="user-chip user-link${active ? ' active' : ''}" href="#/perfil" title="Meu perfil (${escapeHtml(user.email || '')})" aria-label="Meu perfil: ${escapeHtml(user.name || user.email || '')}"${active ? ' aria-current="page"' : ''}>${inner}</a>`;
+}
+
 function renderTopbar(path) {
   const user = session.user;
   document.body.classList.toggle('auth-mode', !user);
@@ -70,10 +82,7 @@ function renderTopbar(path) {
       ${links.map((l) => `<a href="${escapeHtml(l.href)}"${l.href.slice(1) === active ? ' class="active" aria-current="page"' : ''}>${escapeHtml(l.label)}</a>`).join('')}
     </nav>
     <div class="user-box">
-      <span class="user-chip" title="${escapeHtml(user.email || '')}">
-        <span class="avatar" aria-hidden="true">${escapeHtml(initials(user.name || user.email))}</span>
-        <span id="user-name">${escapeHtml(user.name || user.email || '')}</span>
-      </span>
+      ${userChip(user, path)}
       <button type="button" class="btn btn-ghost btn-sm" id="logout-btn">Sair</button>
     </div>
   </div>`;

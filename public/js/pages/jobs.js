@@ -88,6 +88,8 @@ export async function render(view, { query }) {
   }
 
   async function search() {
+    // o debounce pode disparar depois que o usuário saiu da página
+    if (!view.isConnected) return;
     const id = ++requestId;
     syncUrl();
     results.setAttribute('aria-busy', 'true');
@@ -95,7 +97,7 @@ export async function render(view, { query }) {
     else results.style.opacity = '0.6';
     try {
       const jobs = await api(`/jobs${qs(filters)}`);
-      if (id !== requestId) return;
+      if (id !== requestId || !view.isConnected) return;
       paintResults(jobs || []);
     } catch (err) {
       if (id !== requestId) return;
