@@ -64,6 +64,7 @@ export function render(view, { query }) {
           <p class="auth-switch"><span data-switch-text></span> <button type="button" class="link-btn" data-toggle-mode></button></p>
         </form>
         <div class="demo-hint" data-demo></div>
+        <a class="demo-link" href="/emails.html" target="_blank" rel="noopener">✉️ Caixa de e-mails (demo)</a>
       </div>
     </section>
   </div>`;

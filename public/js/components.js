@@ -75,8 +75,10 @@ export function applyButton(job, { size = '' } = {}) {
  * @param opts.actions  HTML (já seguro) à direita do rodapé
  * @param opts.footer   HTML (já seguro) à esquerda do rodapé (default: data de publicação)
  * @param opts.showCompany
+ * @param opts.badge    HTML (já seguro) no canto do cabeçalho (ex.: compatibilidade)
+ * @param opts.extra    HTML (já seguro) abaixo das tecnologias
  */
-export function jobCard(job, { href, actions = '', footer, showCompany = true } = {}) {
+export function jobCard(job, { href, actions = '', footer, showCompany = true, badge = '', extra = '' } = {}) {
   const link = href || `#/vagas/${encodeURIComponent(job.id)}`;
   const foot = footer !== undefined
     ? footer
@@ -88,10 +90,10 @@ export function jobCard(job, { href, actions = '', footer, showCompany = true } 
         <h3><a href="${escapeHtml(link)}">${escapeHtml(job.title)}</a></h3>
         ${showCompany ? `<div class="company-name">${escapeHtml(job.companyName)}</div>` : ''}
       </div>
-      ${job.status === 'closed' ? statusBadge('closed') : ''}
+      ${badge}${job.status === 'closed' ? statusBadge('closed') : ''}
     </div>
     ${jobMeta(job)}
-    ${techChips(job.technologies, { max: 6 })}
+    ${techChips(job.technologies, { max: 6 })}${extra}
     ${(foot || actions) ? `<div class="job-card-foot"><div>${foot || ''}</div><div class="row">${actions}</div></div>` : ''}
   </article>`;
 }
@@ -174,4 +176,26 @@ export function attachedPdfHtml(pdf, { href, downloadText = 'Baixar', removable 
       ${removable ? '<button type="button" class="btn btn-sm btn-danger-ghost" data-pdf-remove>Remover</button>' : ''}
     </div>
   </div>`;
+}
+
+/** Nível de compatibilidade: ≥75 alto (verde), ≥40 médio (âmbar), senão baixo (cinza). */
+export function matchLevel(score) {
+  const n = Math.max(0, Math.min(100, Math.round(Number(score) || 0)));
+  const level = n >= 75 ? 'high' : n >= 40 ? 'mid' : 'low';
+  return { score: n, level, className: `match-badge match-${level}`, label: `${n}% compatível` };
+}
+
+/** Badge "87% compatível". */
+export function matchBadge(score) {
+  const m = matchLevel(score);
+  return `<span class="${m.className}" title="Compatibilidade com o currículo">${escapeHtml(m.label)}</span>`;
+}
+
+/** Chips de tecnologias atendidas (verde) e faltantes (contorno, "Falta: …"). */
+export function matchChips(matched, missing) {
+  const ok = Array.isArray(matched) ? matched.filter(Boolean) : [];
+  const no = Array.isArray(missing) ? missing.filter(Boolean) : [];
+  if (!ok.length && !no.length) return '';
+  return `<div class="chips match-chips">${ok.map((t) => `<span class="chip chip-match">✓ ${escapeHtml(t)}</span>`).join('')}${
+    no.map((t) => `<span class="chip chip-missing">Falta: ${escapeHtml(t)}</span>`).join('')}</div>`;
 }

@@ -158,6 +158,7 @@ export function seed(db) {
 
   db.transaction(() => {
     db.exec(`
+      DELETE FROM emails;
       DELETE FROM applications;
       DELETE FROM jobs;
       DELETE FROM candidates;

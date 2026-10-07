@@ -29,7 +29,7 @@ export async function render(view, { query }) {
         icon: '📢', title: 'Nenhuma vaga aberta',
         actionHtml: '<a class="btn btn-primary" href="#/empresa/vagas/nova">+ Nova vaga</a>',
       })
-      : emptyState('Quando você contratar alguém, a vaga aparece aqui.', { icon: '🗂️', title: 'Nenhuma vaga fechada' });
+      : emptyState('Quando você contratar alguém ou encerrar uma vaga, ela aparece aqui.', { icon: '🗂️', title: 'Nenhuma vaga fechada' });
     return;
   }
 
@@ -38,7 +38,9 @@ export async function render(view, { query }) {
     const href = `#/empresa/vagas/${encodeURIComponent(job.id)}`;
     const footer = `<span class="meta-info">
       <span>${ICONS.users}&nbsp;<strong>${n}</strong>&nbsp;${n === 1 ? 'candidato' : 'candidatos'}</span>
-      ${job.status === 'closed' && job.hiredCandidateName ? `<span style="color:var(--success-ink)">✓ Contratado(a): <strong>${escapeHtml(job.hiredCandidateName)}</strong></span>` : ''}
+      ${job.status === 'closed' ? (job.hiredCandidateName
+        ? `<span style="color:var(--success-ink)">✓ Contratado(a): <strong>${escapeHtml(job.hiredCandidateName)}</strong></span>`
+        : '<span>Encerrada sem contratação</span>') : ''}
     </span>`;
     return jobCard(job, {
       href,

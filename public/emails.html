@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#4f46e5">
+  <title>Caixa de e-mails (demo) · Conecta Vagas</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f46e5'/%3E%3Cpath d='M20.5 11.5a6 6 0 1 0 0 9' stroke='white' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <main class="container" style="padding-top:24px; padding-bottom:24px">
+    <a class="link-back" href="/">← Voltar para o Conecta Vagas</a>
+    <div class="page-header" style="margin-bottom:16px">
+      <div>
+        <h1>Caixa de e-mails (demo)</h1>
+        <p class="subtitle">E-mails de retorno enviados aos candidatos. Atualiza sozinha a cada 5 segundos.</p>
+      </div>
+      <div class="row" style="gap:10px; align-items:center">
+        <span class="muted small" data-updated></span>
+        <button type="button" class="btn" data-refresh>Atualizar</button>
+      </div>
+    </div>
+    <div data-root><div class="loading" role="status"><span class="spinner"></span><span>Carregando…</span></div></div>
+  </main>
+  <script type="module">
+    import { escapeHtml, emptyState, parseDate } from '/js/ui.js';
+
+    const REASONS = { outro_candidato: 'Outro candidato selecionado', vaga_encerrada: 'Vaga encerrada' };
+    const STATUS = { sent: 'Enviado', failed: 'Falhou' };
+    const root = document.querySelector('[data-root]');
+    const updated = document.querySelector('[data-updated]');
+    const refreshBtn = document.querySelector('[data-refresh]');
+    let emails = [];
+    let selectedId = null;
+    let lastSig = '';
+
+    const fmt = (v) => {
+      const d = parseDate(v);
+      return !d ? '' : d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    };
+    const reasonBadge = (r) => `<span class="badge ${r === 'vaga_encerrada' ? 'badge-closed' : 'badge-em_analise'}">${escapeHtml(REASONS[r] || r || 'Outro')}</span>`;
+    const statusBadge = (s) => `<span class="badge badge-${s === 'failed' ? 'failed' : 'sent'}">${escapeHtml(STATUS[s] || s || '')}</span>`;
+
+    function paint() {
+      if (!emails.length) {
+        root.innerHTML = emptyState(
+          'Entre como empresa (rh@technova.com / demo123), abra uma vaga com candidatos e clique em "Contratar e fechar vaga" ou "Encerrar vaga sem contratar". Os candidatos não selecionados recebem um e-mail que aparece aqui.',
+          { icon: '✉️', title: 'Nenhum e-mail enviado ainda', actionHtml: '<a class="btn btn-primary" href="/#/login?perfil=empresa">Entrar como empresa</a>' },
+        );
+        return;
+      }
+      if (!emails.some((e) => e.id === selectedId)) selectedId = emails[0].id;
+      const sel = emails.find((e) => e.id === selectedId);
+      root.innerHTML = `<div class="inbox">
+        <div class="inbox-list" role="listbox" aria-label="E-mails">
+          ${emails.map((e) => `<button type="button" class="inbox-item" role="option" data-id="${escapeHtml(e.id)}" aria-selected="${e.id === selectedId}">
+            <span class="subj">${escapeHtml(e.subject)}</span>
+            <span class="to">Para: ${escapeHtml(e.toEmail)}</span>
+            <span class="row" style="gap:6px; flex-wrap:wrap">${reasonBadge(e.reason)}${statusBadge(e.status)}</span>
+            <span class="when">${escapeHtml(fmt(e.createdAt))}</span>
+          </button>`).join('')}
+        </div>
+        <section class="card inbox-preview">
+          <header>
+            <strong style="overflow-wrap:anywhere">${escapeHtml(sel.subject)}</strong>
+            <span class="muted small">Para: ${escapeHtml(sel.toEmail)} · ${escapeHtml(fmt(sel.createdAt))}</span>
+            <span class="row" style="gap:6px; flex-wrap:wrap">${reasonBadge(sel.reason)}${statusBadge(sel.status)}</span>
+          </header>
+          <iframe sandbox title="Conteúdo do e-mail" data-frame></iframe>
+        </section>
+      </div>`;
+      // HTML do e-mail fica isolado no iframe sandbox (sem scripts, origem opaca).
+      root.querySelector('[data-frame]').srcdoc = sel.html
+        || `<pre style="font-family:system-ui,sans-serif;white-space:pre-wrap">${escapeHtml(sel.text || '')}</pre>`;
+    }
+
+    async function load() {
+      try {
+        const res = await fetch('/api/dev/emails', { headers: { Accept: 'application/json' } });
+        if (!res.ok) throw new Error(res.status === 404 ? 'Endpoint /api/dev/emails indisponível (apenas em desenvolvimento).' : `Erro ${res.status}`);
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : [];
+        const sig = JSON.stringify(list.map((e) => [e.id, e.status]));
+        emails = list;
+        if (sig !== lastSig) { lastSig = sig; paint(); }
+        updated.textContent = `Atualizado às ${new Date().toLocaleTimeString('pt-BR')}`;
+      } catch (err) {
+        lastSig = '';
+        root.innerHTML = emptyState(err.message || 'Sem conexão com o servidor', { icon: '⚠️', title: 'Não foi possível carregar os e-mails' });
+      }
+    }
+
+    root.addEventListener('click', (e) => {
+      const item = e.target.closest('[data-id]');
+      if (!item) return;
+      selectedId = emails.find((x) => String(x.id) === item.dataset.id)?.id ?? selectedId;
+      paint();
+    });
+    refreshBtn.addEventListener('click', () => { lastSig = ''; load(); });
+    load();
+    setInterval(load, 5000);
+  </script>
+</body>
+</html>

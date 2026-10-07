@@ -1,6 +1,6 @@
 import { api, qs } from '../api.js';
 import { escapeHtml, options, loading, emptyState, debounce, SENIORITY_LABELS } from '../ui.js';
-import { jobCard, applyButton } from '../components.js';
+import { jobCard, applyButton, matchBadge, matchChips } from '../components.js';
 import { bindApplyButtons } from '../apply.js';
 
 const SEARCH_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>';
@@ -15,7 +15,71 @@ function readFilters(query) {
   };
 }
 
+function tabsHtml(active) {
+  const tab = (key, href, text) => `<a class="tab${active === key ? ' active' : ''}" href="${href}"${active === key ? ' aria-current="page"' : ''}>${text}</a>`;
+  return `<nav class="tabs jobs-tabs" aria-label="Visualização das vagas">
+    ${tab('todas', '#/vagas', 'Todas as vagas')}
+    ${tab('recomendadas', '#/vagas?aba=recomendadas', '✨ Recomendadas para você')}
+  </nav>`;
+}
+
+async function renderRecommended(view) {
+  view.innerHTML = `
+    <div class="page-header">
+      <div>
+        <h1>Vagas recomendadas para você</h1>
+        <p class="subtitle">Vagas abertas que combinam com as tecnologias do seu currículo, das mais compatíveis para as menos.</p>
+      </div>
+    </div>
+    ${tabsHtml('recomendadas')}
+    <section class="stack" style="gap:16px; min-width:0">
+      <div class="results-bar" data-results-bar></div>
+      <div data-results>${loading('Buscando vagas compatíveis…')}</div>
+    </section>`;
+  const results = view.querySelector('[data-results]');
+  const resultsBar = view.querySelector('[data-results-bar]');
+  bindApplyButtons(results);
+
+  let jobs;
+  try {
+    jobs = (await api('/jobs/matches')) || [];
+  } catch (err) {
+    if (!view.isConnected) return;
+    results.innerHTML = emptyState(err.message, { icon: '⚠️', title: 'Erro ao buscar recomendações' });
+    return;
+  }
+  if (!view.isConnected) return;
+
+  if (!jobs.length) {
+    let hasTechs = true;
+    try {
+      const profile = await api('/candidate/profile');
+      hasTechs = Array.isArray(profile?.technologies) && profile.technologies.length > 0;
+    } catch { /* mantém mensagem genérica */ }
+    if (!view.isConnected) return;
+    results.innerHTML = hasTechs
+      ? emptyState('Nenhuma vaga aberta usa as tecnologias do seu currículo no momento. Veja todas as vagas ou volte mais tarde.', {
+        icon: '🧭', title: 'Nenhuma vaga compatível agora',
+        actionHtml: '<a class="btn btn-primary" href="#/vagas">Ver todas as vagas</a>',
+      })
+      : emptyState('As recomendações são calculadas a partir das tecnologias do seu currículo.', {
+        icon: '🧩', title: 'Adicione tecnologias ao seu currículo',
+        actionHtml: '<a class="btn btn-primary" href="#/curriculo">Adicione tecnologias ao seu currículo</a>',
+      });
+    return;
+  }
+
+  const n = jobs.length;
+  resultsBar.innerHTML = `<span><strong>${n}</strong> ${n === 1 ? 'vaga compatível' : 'vagas compatíveis'} com o seu currículo</span>`;
+  results.innerHTML = `<div class="job-list">${jobs.map((job) => jobCard({ ...job, technologies: [] }, {
+    actions: applyButton(job, { size: 'sm' }),
+    badge: matchBadge(job.matchScore),
+    extra: matchChips(job.matchedTechnologies, job.missingTechnologies),
+  })).join('')}</div>`;
+}
+
 export async function render(view, { query }) {
+  if (query.aba === 'recomendadas') return renderRecommended(view);
   const filters = readFilters(query);
   let meta = { companies: [], technologies: [] };
   let requestId = 0;
@@ -27,6 +91,7 @@ export async function render(view, { query }) {
         <p class="subtitle">Oportunidades abertas em empresas que estão contratando agora.</p>
       </div>
     </div>
+    ${tabsHtml('todas')}
     <div class="layout-sidebar">
       <aside class="sidebar collapsed" data-sidebar>
         <button type="button" class="btn btn-block filters-toggle" data-toggle-filters aria-expanded="false">Filtros <span data-filter-count></span></button>

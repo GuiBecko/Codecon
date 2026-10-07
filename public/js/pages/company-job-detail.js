@@ -3,7 +3,7 @@ import { go } from '../session.js';
 import {
   escapeHtml, label, formatDate, formatLocation, initials, toast, withButton, confirmModal, emptyState, SENIORITY_LABELS,
 } from '../ui.js';
-import { jobMeta, techChips, statusBadge, resumeHtml, attachedPdfHtml, ICONS } from '../components.js';
+import { jobMeta, techChips, statusBadge, resumeHtml, attachedPdfHtml, matchBadge, matchChips, ICONS } from '../components.js';
 import { downloadResumePdf } from '../resume-pdf.js';
 
 export async function render(view, { params }) {
@@ -15,7 +15,7 @@ export async function render(view, { params }) {
   const hired = apps.find((a) => a.id === job.hiredApplicationId) || apps.find((a) => a.status === 'aprovado');
   const nameOf = (a) => (a.candidate && a.candidate.fullName) || 'Candidato(a) sem nome';
 
-  // Contratado primeiro; depois em ordem de candidatura.
+  // Contratado primeiro; depois na ordem da API (maior compatibilidade primeiro).
   const ordered = [...apps].sort((a, b) => (b === hired) - (a === hired));
 
   view.innerHTML = `
@@ -26,7 +26,10 @@ export async function render(view, { params }) {
           <h1>${escapeHtml(job.title)}</h1>
           <div class="muted small" style="margin-top:4px">Publicada em ${escapeHtml(formatDate(job.createdAt))}</div>
         </div>
-        ${statusBadge(job.status)}
+        <div class="row" style="gap:8px; flex-wrap:wrap; justify-content:flex-end">
+          ${statusBadge(job.status)}
+          ${open ? '<button type="button" class="btn btn-sm btn-danger-ghost" data-cancel-job>Encerrar vaga sem contratar</button>' : ''}
+        </div>
       </div>
       ${jobMeta(job)}
       ${techChips(job.technologies)}
@@ -36,14 +39,38 @@ export async function render(view, { params }) {
       <span aria-hidden="true" style="font-size:1.3rem">🎉</span>
       <div>Vaga encerrada. Contratado(a): <strong>${escapeHtml(nameOf(hired))}</strong></div>
     </div>` : ''}
+    ${!open && !hired ? `<div class="hired-banner" style="background:var(--neutral-soft); border-color:var(--border); color:var(--neutral-ink)">
+      <span aria-hidden="true" style="font-size:1.3rem">🗂️</span>
+      <div>Vaga encerrada sem contratação.</div>
+    </div>` : ''}
+    ${!open ? '<a class="demo-link" href="/emails.html" target="_blank" rel="noopener">✉️ Ver e-mails enviados aos candidatos — Caixa de e-mails (demo)</a>' : ''}
     <div class="page-header">
       <h2>Candidatos (${apps.length})</h2>
-      ${open && apps.length ? '<span class="muted small">Clique em um candidato para ver o currículo completo.</span>' : ''}
+      ${apps.length ? `<span class="match-hint">↓ Ordenado por compatibilidade${open ? ' · clique em um candidato para ver o currículo completo' : ''}</span>` : ''}
     </div>
     <div class="stack" data-list>
       ${apps.length ? ordered.map((a) => applicantHtml(a, { open, isHired: a === hired, nameOf })).join('')
         : emptyState(open ? 'Assim que alguém se candidatar, o currículo aparece aqui.' : 'Esta vaga foi encerrada sem candidaturas.', { icon: '👥', title: 'Nenhum candidato ainda' })}
     </div>`;
+
+  const cancelBtn = view.querySelector('[data-cancel-job]');
+  if (cancelBtn) cancelBtn.addEventListener('click', async () => {
+    const pending = apps.filter((a) => a.status === 'em_analise').length;
+    const ok = await confirmModal({
+      title: 'Encerrar vaga sem contratar?',
+      message: `A vaga "${job.title}" será encerrada sem contratação.`
+        + (pending > 0 ? ` ${pending === 1 ? 'O candidato em análise será marcado' : `Os ${pending} candidatos em análise serão marcados`} como "Não selecionado" e ${pending === 1 ? 'receberá' : 'receberão'} um e-mail informando que a vaga foi encerrada.` : '')
+        + ' Esta ação não pode ser desfeita.',
+      confirmText: 'Encerrar vaga',
+      confirmClass: 'btn-danger',
+    });
+    if (!ok || !view.isConnected) return;
+    await withButton(cancelBtn, async () => {
+      await api(`/company/jobs/${job.id}/cancel`, { method: 'POST' });
+      toast('Vaga encerrada. Candidatos notificados por e-mail.', 'success');
+      go(location.hash);
+    });
+  });
 
   view.querySelector('[data-list]').addEventListener('click', async (e) => {
     const gen = e.target.closest('[data-gen-pdf]');
@@ -60,7 +87,7 @@ export async function render(view, { params }) {
     const ok = await confirmModal({
       title: 'Contratar e fechar vaga?',
       message: `${nameOf(app)} será marcado(a) como Aprovado(a) e a vaga "${job.title}" será fechada.`
-        + (others > 0 ? ` ${others === 1 ? 'O outro candidato será marcado' : `Os outros ${others} candidatos serão marcados`} como "Não selecionado".` : '')
+        + (others > 0 ? ` ${others === 1 ? 'O outro candidato será marcado' : `Os outros ${others} candidatos serão marcados`} como "Não selecionado" e ${others === 1 ? 'receberá' : 'receberão'} um e-mail de retorno.` : '')
         + ' Esta ação não pode ser desfeita.',
       confirmText: 'Contratar e fechar',
       confirmClass: 'btn-success',
@@ -68,7 +95,7 @@ export async function render(view, { params }) {
     if (!ok || !view.isConnected) return;
     await withButton(btn, async () => {
       await api(`/company/jobs/${job.id}/close`, { method: 'POST', body: { applicationId: appId } });
-      toast(`${nameOf(app)} contratado(a)! Vaga fechada.`, 'success');
+      toast('Vaga fechada. Os demais candidatos foram notificados por e-mail.', 'success');
       go(location.hash);
     });
   });
@@ -84,10 +111,12 @@ function applicantHtml(a, { open, isHired, nameOf }) {
         <strong>${escapeHtml(nameOf(a))}</strong>
         <span>${escapeHtml(sub)}</span>
       </div>
+      ${a.matchScore !== undefined && a.matchScore !== null ? matchBadge(a.matchScore) : ''}
       ${statusBadge(a.status)}
       ${ICONS.chevron}
     </summary>
     <div class="applicant-body">
+      ${matchChips(a.matchedTechnologies, a.missingTechnologies)}
       ${c.resumePdf ? attachedPdfHtml(c.resumePdf, {
         href: `/api/company/applications/${encodeURIComponent(a.id)}/resume-pdf`,
         downloadText: 'Baixar PDF',
