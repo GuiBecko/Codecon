@@ -770,28 +770,6 @@ body.auth-mode #app { max-width: none; padding: 0; }
 }
 .link-btn:hover { text-decoration: underline; }
 
-.demo-hint {
-  border: 1px dashed #c7d2fe;
-  background: var(--primary-soft);
-  color: var(--primary-ink);
-  border-radius: var(--radius);
-  padding: 12px 14px;
-  font-size: 0.84rem;
-}
-.demo-hint .row { margin-top: 8px; gap: 6px; }
-.demo-hint button {
-  appearance: none;
-  font: inherit;
-  font-size: 0.8rem;
-  border: 1px solid #c7d2fe;
-  background: var(--surface);
-  color: var(--primary-ink);
-  border-radius: var(--radius-pill);
-  padding: 3px 10px;
-  cursor: pointer;
-}
-.demo-hint button:hover { border-color: var(--primary); }
-
 /* ==========================================================================
    Job detail
    ========================================================================== */

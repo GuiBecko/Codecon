@@ -45,7 +45,7 @@
     function paint() {
       if (!emails.length) {
         root.innerHTML = emptyState(
-          'Entre como empresa (rh@technova.com / demo123), abra uma vaga com candidatos e clique em "Contratar e fechar vaga" ou "Encerrar vaga sem contratar". Os candidatos não selecionados recebem um e-mail que aparece aqui.',
+          'Entre como empresa, abra uma vaga com candidatos e clique em "Contratar e fechar vaga" ou "Encerrar vaga sem contratar". Os candidatos não selecionados recebem um e-mail que aparece aqui.',
           { icon: '✉️', title: 'Nenhum e-mail enviado ainda', actionHtml: '<a class="btn btn-primary" href="/#/login?perfil=empresa">Entrar como empresa</a>' },
         );
         return;

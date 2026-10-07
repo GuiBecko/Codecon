@@ -23,11 +23,6 @@ const HERO = {
   },
 };
 
-const DEMO = {
-  candidate: ['ana@demo.com', 'bruno@demo.com'],
-  company: ['rh@technova.com', 'talentos@aurorabank.com', 'vagas@lojaviva.com'],
-};
-
 export function render(view, { query }) {
   const state = {
     role: query.perfil === 'empresa' ? 'company' : 'candidate',
@@ -63,7 +58,6 @@ export function render(view, { query }) {
           <button type="submit" class="btn btn-primary btn-lg btn-block" data-submit></button>
           <p class="auth-switch"><span data-switch-text></span> <button type="button" class="link-btn" data-toggle-mode></button></p>
         </form>
-        <div class="demo-hint" data-demo></div>
         <a class="demo-link" href="/emails.html" target="_blank" rel="noopener">✉️ Caixa de e-mails (demo)</a>
       </div>
     </section>
@@ -106,10 +100,6 @@ export function render(view, { query }) {
     $('[data-submit]').textContent = isReg ? 'Criar conta' : 'Entrar';
     $('[data-switch-text]').textContent = isReg ? 'Já tem conta?' : 'Ainda não tem conta?';
     $('[data-toggle-mode]').textContent = isReg ? 'Entrar' : 'Criar conta';
-
-    const demo = DEMO[state.role];
-    $('[data-demo]').innerHTML = `<strong>Contas de demonstração</strong> · senha <code>demo123</code>
-      <div class="row">${demo.map((e) => `<button type="button" data-demo-email="${escapeHtml(e)}">${escapeHtml(e)}</button>`).join('')}</div>`;
   }
 
   view.addEventListener('click', (e) => {
@@ -119,15 +109,6 @@ export function render(view, { query }) {
       state.mode = state.mode === 'login' ? 'register' : 'login';
       paint();
       (state.mode === 'register' ? $('#auth-name') : $('#auth-email')).focus();
-      return;
-    }
-    const demoBtn = e.target.closest('[data-demo-email]');
-    if (demoBtn) {
-      state.mode = 'login';
-      paint();
-      $('#auth-email').value = demoBtn.dataset.demoEmail;
-      $('#auth-password').value = 'demo123';
-      $('[data-submit]').focus();
     }
   });
 
