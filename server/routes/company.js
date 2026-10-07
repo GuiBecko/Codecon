@@ -4,8 +4,9 @@ import { HttpError, parseId, techsToCsv } from '../validation.js';
 import { profileFromRow } from '../profile-model.js';
 import { JOB_SELECT, jobFromRow, parseJobInput } from '../job-model.js';
 import { rankApplications } from '../match.js';
+import { sendPdf } from '../resume-pdf.js';
 
-export function companyRouter(db) {
+export function companyRouter(db, uploadsDir) {
   const router = Router();
   router.use(requireRole(db, 'company'));
 
@@ -66,9 +67,11 @@ export function companyRouter(db) {
   router.get('/jobs/:id/applications', (req, res) => {
     const job = findOwnJob(req.params.id, req.user.id);
     const rows = db.prepare(`
-      SELECT a.id AS application_id, a.status AS application_status, a.created_at AS application_created_at, k.*
+      SELECT a.id AS application_id, a.status AS application_status, a.created_at AS application_created_at,
+        u.email AS candidate_email, k.*
       FROM applications a
       JOIN candidates k ON k.user_id = a.candidate_id
+      JOIN users u ON u.id = a.candidate_id
       WHERE a.job_id = ?
       ORDER BY a.created_at ASC, a.id ASC
     `).all(job.id);
@@ -76,13 +79,33 @@ export function companyRouter(db) {
       id: r.application_id,
       status: r.application_status,
       createdAt: r.application_created_at,
-      candidate: profileFromRow(r),
+      candidate: { ...profileFromRow(r), email: r.candidate_email },
     }));
     res.json({
       job,
       applications: rankApplications(applications, job),
     });
   });
+
+  router.get('/applications/:id/resume-pdf', (req, res) => {
+    let id;
+    try {
+      id = parseId(req.params.id);
+    } catch {
+      throw new HttpError(404, 'Candidatura não encontrada');
+    }
+    const row = db.prepare(`
+      SELECT j.company_id, k.resume_pdf_path, k.resume_pdf_name
+      FROM applications a
+      JOIN jobs j ON j.id = a.job_id
+      JOIN candidates k ON k.user_id = a.candidate_id
+      WHERE a.id = ?
+    `).get(id);
+    if (!row) throw new HttpError(404, 'Candidatura não encontrada');
+    if (row.company_id !== req.user.id) throw new HttpError(403, 'Esta vaga pertence a outra empresa');
+    sendPdf(res, uploadsDir, row);
+  });
+
   router.post('/jobs/:id/close', (req, res) => {
     const job = findOwnJob(req.params.id, req.user.id);
     if (job.status !== 'open') throw new HttpError(400, 'Esta vaga já está fechada');

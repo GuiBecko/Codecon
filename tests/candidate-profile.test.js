@@ -9,8 +9,8 @@ test('perfil inicial vem incompleto com nome do cadastro', async () => {
   const res = await agent.get('/api/candidate/profile');
   assert.equal(res.status, 200);
   assert.deepEqual(res.body, {
-    fullName: 'Ana', phone: '', city: '', linkedin: '', seniority: null,
-    technologies: [], summary: '', experiences: [], education: [], complete: false,
+    fullName: 'Ana', phone: '', city: '', state: '', country: 'Brasil', linkedin: '', seniority: null,
+    technologies: [], summary: '', experiences: [], education: [], resumePdf: null, complete: false,
   });
 });
 
@@ -26,7 +26,8 @@ test('PUT salva, normaliza tecnologias e marca completo', async () => {
   assert.deepEqual(res.body.technologies, ['react', 'node', 'type script']);
   assert.equal(res.body.complete, true);
   assert.equal(res.body.experiences.length, 1);
-  assert.deepEqual(res.body.education, COMPLETE_PROFILE.education);
+  assert.deepEqual(res.body.education, COMPLETE_PROFILE.education.map((e) => ({ ...e, situacao: 'concluido' })));
+  assert.equal(res.body.linkedin, 'https://www.linkedin.com/in/maria');
   const again = await agent.get('/api/candidate/profile');
   assert.deepEqual(again.body, res.body);
 });

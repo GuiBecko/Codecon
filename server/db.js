@@ -23,12 +23,18 @@ CREATE TABLE IF NOT EXISTS candidates (
   full_name TEXT NOT NULL DEFAULT '',
   phone TEXT NOT NULL DEFAULT '',
   city TEXT NOT NULL DEFAULT '',
+  state TEXT NOT NULL DEFAULT '',
+  country TEXT NOT NULL DEFAULT 'Brasil',
   linkedin TEXT NOT NULL DEFAULT '',
   seniority TEXT CHECK (seniority IS NULL OR seniority IN ('estagio', 'junior', 'pleno', 'senior', 'especialista')),
   technologies TEXT NOT NULL DEFAULT '',
   summary TEXT NOT NULL DEFAULT '',
   experiences TEXT NOT NULL DEFAULT '[]',
   education TEXT NOT NULL DEFAULT '[]',
+  resume_pdf_path TEXT,
+  resume_pdf_name TEXT,
+  resume_pdf_size INTEGER,
+  resume_pdf_uploaded_at TEXT,
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -61,6 +67,25 @@ CREATE INDEX IF NOT EXISTS idx_jobs_company ON jobs(company_id);
 CREATE INDEX IF NOT EXISTS idx_applications_candidate ON applications(candidate_id);
 `;
 
+// Colunas adicionadas depois da primeira versão: bancos antigos ganham via ALTER TABLE.
+const CANDIDATE_MIGRATIONS = {
+  state: "TEXT NOT NULL DEFAULT ''",
+  country: "TEXT NOT NULL DEFAULT 'Brasil'",
+  resume_pdf_path: 'TEXT',
+  resume_pdf_name: 'TEXT',
+  resume_pdf_size: 'INTEGER',
+  resume_pdf_uploaded_at: 'TEXT',
+};
+
+function migrate(db) {
+  const existing = new Set(db.prepare('PRAGMA table_info(candidates)').all().map((c) => c.name));
+  db.transaction(() => {
+    for (const [column, type] of Object.entries(CANDIDATE_MIGRATIONS)) {
+      if (!existing.has(column)) db.exec(`ALTER TABLE candidates ADD COLUMN ${column} ${type}`);
+    }
+  })();
+}
+
 export function createDb(dbPath = process.env.DB_PATH || 'data/app.db') {
   if (dbPath !== ':memory:') {
     fs.mkdirSync(path.dirname(path.resolve(dbPath)), { recursive: true });
@@ -69,5 +94,6 @@ export function createDb(dbPath = process.env.DB_PATH || 'data/app.db') {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA);
+  migrate(db);
   return db;
 }

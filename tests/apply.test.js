@@ -92,3 +92,15 @@ test('GET /api/candidate/applications lista as candidaturas mais recentes primei
   assert.equal(typeof res.body[0].createdAt, 'string');
   assert.deepEqual(res.body[0].job, { id: j2.id, title: 'Vaga 2', companyName: 'ACME', status: 'open' });
 });
+
+test('candidatura repetida em vaga já fechada → 409 (duplicidade vence)', async () => {
+  const { app, db } = setup();
+  const company = await register(app, 'company');
+  const job = await createJob(company);
+  const candidate = await candidateWithProfile(app);
+  assert.equal((await candidate.post(`/api/jobs/${job.id}/apply`)).status, 201);
+  db.prepare("UPDATE jobs SET status = 'closed' WHERE id = ?").run(job.id);
+  const res = await candidate.post(`/api/jobs/${job.id}/apply`);
+  assert.equal(res.status, 409);
+  assert.equal(res.body.error, 'Você já se candidatou a esta vaga');
+});

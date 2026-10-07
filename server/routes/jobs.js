@@ -51,6 +51,9 @@ export function jobsRouter(db) {
 
   router.post('/:id/apply', (req, res) => {
     const job = findJob(req.params.id);
+    const existing = db.prepare('SELECT 1 FROM applications WHERE job_id = ? AND candidate_id = ?')
+      .get(job.id, req.user.id);
+    if (existing) throw new HttpError(409, 'Você já se candidatou a esta vaga');
     if (job.status !== 'open') {
       throw new HttpError(400, 'Esta vaga não está mais aceitando candidaturas');
     }

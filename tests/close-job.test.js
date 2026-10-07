@@ -27,7 +27,9 @@ test('GET /company/jobs/:id/applications traz currículo completo, mais antigas 
   assert.equal(typeof first.createdAt, 'string');
   assert.equal(first.candidate.fullName, 'Alice');
   assert.equal(first.candidate.complete, true);
-  assert.deepEqual(first.candidate.experiences, COMPLETE_PROFILE.experiences);
+  assert.deepEqual(first.candidate.experiences, COMPLETE_PROFILE.experiences.map((e) => ({ ...e, atual: false })));
+  assert.equal(first.candidate.email, s.alice.user.email);
+  assert.equal(first.candidate.resumePdf, null);
 
   const list = await s.company.get('/api/company/jobs');
   assert.equal(list.body.find((j) => j.id === s.job.id).applicationsCount, 2);

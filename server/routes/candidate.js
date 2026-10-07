@@ -2,8 +2,9 @@ import { Router } from 'express';
 import { requireRole } from '../middleware/auth.js';
 import { profileFromRow, parseProfileInput } from '../profile-model.js';
 import { techsToCsv } from '../validation.js';
+import { pdfUpload, assertPdf, savePdf, removePdf, sendPdf, sanitizePdfName } from '../resume-pdf.js';
 
-export function candidateRouter(db) {
+export function candidateRouter(db, uploadsDir) {
   const router = Router();
   router.use(requireRole(db, 'candidate'));
 
@@ -17,14 +18,51 @@ export function candidateRouter(db) {
   router.put('/profile', (req, res) => {
     const p = parseProfileInput(req.body);
     db.prepare(`
-      UPDATE candidates SET full_name = ?, phone = ?, city = ?, linkedin = ?, seniority = ?,
-        technologies = ?, summary = ?, experiences = ?, education = ?, updated_at = datetime('now')
+      UPDATE candidates SET full_name = ?, phone = ?, city = ?, state = ?, country = ?, linkedin = ?,
+        seniority = ?, technologies = ?, summary = ?, experiences = ?, education = ?, updated_at = datetime('now')
       WHERE user_id = ?
     `).run(
-      p.fullName, p.phone, p.city, p.linkedin, p.seniority, techsToCsv(p.technologies),
+      p.fullName, p.phone, p.city, p.state, p.country, p.linkedin, p.seniority, techsToCsv(p.technologies),
       p.summary, JSON.stringify(p.experiences), JSON.stringify(p.education), req.user.id,
     );
     res.json(getProfile(req.user.id));
+  });
+
+  const pdfRow = (userId) => db.prepare(
+    'SELECT resume_pdf_path, resume_pdf_name FROM candidates WHERE user_id = ?',
+  ).get(userId);
+
+  router.put('/resume-pdf', pdfUpload, (req, res) => {
+    assertPdf(req.file);
+    const previous = pdfRow(req.user.id)?.resume_pdf_path;
+    const filename = savePdf(uploadsDir, req.file.buffer);
+    try {
+      db.prepare(`
+        UPDATE candidates SET resume_pdf_path = ?, resume_pdf_name = ?, resume_pdf_size = ?,
+          resume_pdf_uploaded_at = datetime('now'), updated_at = datetime('now')
+        WHERE user_id = ?
+      `).run(filename, sanitizePdfName(req.file.originalname), req.file.size, req.user.id);
+    } catch (err) {
+      removePdf(uploadsDir, filename);
+      throw err;
+    }
+    if (previous) removePdf(uploadsDir, previous);
+    res.json(getProfile(req.user.id));
+  });
+
+  router.get('/resume-pdf', (req, res) => {
+    sendPdf(res, uploadsDir, pdfRow(req.user.id));
+  });
+
+  router.delete('/resume-pdf', (req, res) => {
+    const previous = pdfRow(req.user.id)?.resume_pdf_path;
+    db.prepare(`
+      UPDATE candidates SET resume_pdf_path = NULL, resume_pdf_name = NULL, resume_pdf_size = NULL,
+        resume_pdf_uploaded_at = NULL, updated_at = datetime('now')
+      WHERE user_id = ?
+    `).run(req.user.id);
+    if (previous) removePdf(uploadsDir, previous);
+    res.status(204).end();
   });
 
   router.get('/applications', (req, res) => {
