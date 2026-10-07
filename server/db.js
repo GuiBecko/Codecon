@@ -63,6 +63,20 @@ CREATE TABLE IF NOT EXISTS applications (
   UNIQUE (job_id, candidate_id)
 );
 
+CREATE TABLE IF NOT EXISTS emails (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  to_email TEXT NOT NULL,
+  to_user_id INTEGER,
+  subject TEXT NOT NULL,
+  text TEXT NOT NULL DEFAULT '',
+  html TEXT NOT NULL DEFAULT '',
+  reason TEXT CHECK (reason IS NULL OR reason IN ('outro_candidato', 'vaga_encerrada')),
+  job_id INTEGER,
+  status TEXT NOT NULL CHECK (status IN ('sent', 'failed')),
+  error TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_jobs_company ON jobs(company_id);
 CREATE INDEX IF NOT EXISTS idx_applications_candidate ON applications(candidate_id);
 `;

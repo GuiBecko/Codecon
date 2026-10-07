@@ -5,6 +5,7 @@ import { createDb } from '../server/db.js';
 import { createApp } from '../server/app.js';
 import { seed, DEMO_PASSWORD } from '../server/seed.js';
 import { profileFromRow, parseProfileInput } from '../server/profile-model.js';
+import { fakeTransport } from './helpers.js';
 
 const count = (db, table) => db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n;
 
@@ -26,7 +27,7 @@ test('seed popula dados de demo e é idempotente', () => {
 test('ana loga com a senha demo e tem currículo completo', async () => {
   const db = createDb(':memory:');
   seed(db);
-  const app = createApp({ db, sessionSecret: 'test' });
+  const app = createApp({ db, sessionSecret: 'test', mailTransport: fakeTransport() });
   const agent = request.agent(app);
   const login = await agent.post('/api/auth/login').send({ email: 'ana@demo.com', password: DEMO_PASSWORD });
   assert.equal(login.status, 200);

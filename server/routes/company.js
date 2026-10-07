@@ -3,16 +3,58 @@ import { requireRole } from '../middleware/auth.js';
 import { HttpError, parseId, techsToCsv } from '../validation.js';
 import { profileFromRow } from '../profile-model.js';
 import { JOB_SELECT, jobFromRow, parseJobInput } from '../job-model.js';
-import { rankApplications } from '../match.js';
+import { rankApplications, scoreMatch, matchJobs } from '../match.js';
+import { buildRejectionEmail } from '../rejection-emails.js';
 import { sendPdf } from '../resume-pdf.js';
 
-export function companyRouter(db, uploadsDir) {
+export function companyRouter(db, uploadsDir, mailer) {
   const router = Router();
   router.use(requireRole(db, 'company'));
 
   const getJob = (id) => {
     const row = db.prepare(`${JOB_SELECT} WHERE j.id = ?`).get(id);
     return row ? jobFromRow(row) : null;
+  };
+
+  const pendingApplicationIds = (jobId) => db
+    .prepare("SELECT id FROM applications WHERE job_id = ? AND status = 'em_analise'")
+    .all(jobId).map((r) => r.id);
+
+  // E-mails de retorno: montados e enviados depois do commit, fora do ciclo da resposta.
+  const notifyRejections = (applicationIds, reason, jobId) => {
+    if (!applicationIds.length || !mailer) return;
+    mailer.defer(() => {
+      const job = getJob(jobId);
+      const openJobs = reason === 'vaga_encerrada'
+        ? db.prepare(`${JOB_SELECT} WHERE j.status = 'open'`).all().map(jobFromRow)
+        : [];
+      return applicationIds.map((applicationId) => {
+        const row = db.prepare(`
+          SELECT u.id AS user_id, u.email, k.*
+          FROM applications a
+          JOIN users u ON u.id = a.candidate_id
+          JOIN candidates k ON k.user_id = a.candidate_id
+          WHERE a.id = ?
+        `).get(applicationId);
+        const candidate = profileFromRow(row);
+        let recommendations = [];
+        if (reason === 'vaga_encerrada') {
+          const applied = new Set(db.prepare('SELECT job_id FROM applications WHERE candidate_id = ?')
+            .all(row.user_id).map((r) => r.job_id));
+          recommendations = matchJobs(candidate.technologies, openJobs.filter((j) => !applied.has(j.id)))
+            .slice(0, 3);
+        }
+        const email = buildRejectionEmail({
+          reason,
+          candidate,
+          job,
+          companyName: job.companyName,
+          match: scoreMatch(candidate.technologies, job.technologies),
+          recommendations,
+        });
+        return { ...email, to: row.email, toUserId: row.user_id, reason, jobId: job.id };
+      });
+    });
   };
 
   router.post('/jobs', (req, res) => {
@@ -27,7 +69,6 @@ export function companyRouter(db, uploadsDir) {
     );
     res.status(201).json(getJob(Number(lastInsertRowid)));
   });
-
 
   router.get('/jobs', (req, res) => {
     const status = req.query.status ?? 'open';
@@ -120,16 +161,38 @@ export function companyRouter(db, uploadsDir) {
       .get(applicationId, job.id);
     if (!application) throw new HttpError(400, 'Esta candidatura não pertence a esta vaga');
 
-    db.transaction(() => {
+    const rejected = db.transaction(() => {
       const updated = db.prepare(`
         UPDATE jobs SET status = 'closed', hired_application_id = ? WHERE id = ? AND status = 'open'
       `).run(applicationId, job.id);
       if (updated.changes !== 1) throw new HttpError(400, 'Esta vaga já está fechada');
+      const ids = pendingApplicationIds(job.id).filter((id) => id !== applicationId);
       db.prepare("UPDATE applications SET status = 'aprovado' WHERE id = ?").run(applicationId);
       db.prepare("UPDATE applications SET status = 'nao_selecionado' WHERE job_id = ? AND id <> ?")
         .run(job.id, applicationId);
+      return ids;
     })();
 
+    notifyRejections(rejected, 'outro_candidato', job.id);
+    res.json(getJob(job.id));
+  });
+
+  router.post('/jobs/:id/cancel', (req, res) => {
+    const job = findOwnJob(req.params.id, req.user.id);
+    if (job.status !== 'open') throw new HttpError(400, 'Esta vaga já está fechada');
+
+    const rejected = db.transaction(() => {
+      const updated = db.prepare(`
+        UPDATE jobs SET status = 'closed', hired_application_id = NULL WHERE id = ? AND status = 'open'
+      `).run(job.id);
+      if (updated.changes !== 1) throw new HttpError(400, 'Esta vaga já está fechada');
+      const ids = pendingApplicationIds(job.id);
+      db.prepare("UPDATE applications SET status = 'nao_selecionado' WHERE job_id = ? AND status = 'em_analise'")
+        .run(job.id);
+      return ids;
+    })();
+
+    notifyRejections(rejected, 'vaga_encerrada', job.id);
     res.json(getJob(job.id));
   });
 

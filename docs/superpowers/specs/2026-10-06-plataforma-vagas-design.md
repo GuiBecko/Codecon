@@ -176,3 +176,25 @@ Upload via `multer` em memória, limite 5 MB, assinatura `%PDF-` obrigatória. A
 
 ### Frontend
 O frontend importa dados de um currículo em PDF com heurísticas sobre o texto extraído pelo pdf.js e exporta o currículo em PDF com jsPDF.
+
+## 10. Match e e-mails de retorno
+
+### Match (`server/match.js`)
+- `scoreMatch(candidateTechs, jobTechs)` → `{matchScore, matchedTechnologies, missingTechnologies}`; `matchScore` = % (arredondado) das tecnologias da vaga que o candidato tem. Vaga sem tecnologias → 0.
+- `matchJobs(candidateTechs, jobs, {minScore = 1})`: só vagas com ao menos 1 tecnologia em comum, ordenadas por score desc → nº de tecnologias atendidas desc → mais nova primeiro.
+- `rankApplications(applications, job)`: score desc → candidatura mais antiga primeiro.
+
+| Método | Rota | Notas |
+|---|---|---|
+| GET | `/jobs/matches` | candidato; vagas **abertas** compatíveis, cada uma com `matchScore`, `matchedTechnologies`, `missingTechnologies`, `alreadyApplied`; sem tecnologias → `[]`; empresa → 403. Declarada antes de `/jobs/:id` |
+| GET | `/company/jobs/:id/applications` | candidaturas ordenadas por `rankApplications`, cada uma com `matchScore`, `matchedTechnologies`, `missingTechnologies` |
+| POST | `/company/jobs/:id/cancel` | fecha **sem contratação**: 404/403 como `/close`; 400 `Esta vaga já está fechada`. Numa transação: `status='closed'`, `hired_application_id=NULL`, candidaturas `em_analise` → `nao_selecionado`. Responde a vaga |
+
+### E-mails de retorno
+- Disparados por `/close` (motivo `outro_candidato`) e `/cancel` (motivo `vaga_encerrada`), um por candidatura que passou de `em_analise` para `nao_selecionado` **naquela operação** (nunca para o contratado nem para quem já estava não selecionado).
+- Conteúdo (`server/rejection-emails.js`, função pura `buildRejectionEmail`): pt-BR, primeiro nome, título da vaga e empresa; HTML com todos os valores escapados.
+  - `outro_candidato`: outra pessoa com perfil mais alinhado foi selecionada; % das tecnologias atendidas, lista das atendidas e das que "fortaleceriam seu perfil"; nota de senioridade se o nível do perfil difere do da vaga; com 100% das tecnologias, a decisão "se deu por outros fatores".
+  - `vaga_encerrada`: vaga encerrada sem contratação, sem relação com o perfil; até 3 vagas abertas recomendadas (`matchJobs`, excluindo as já candidatadas) com título, empresa e %, ou "veja as vagas abertas".
+- Envio (`server/mailer.js`, nodemailer) **depois do commit**, fora do ciclo da resposta (`setImmediate`); erros nunca afetam a resposta HTTP. Tabela `emails (id, to_email, to_user_id, subject, text, html, reason, job_id, status 'sent'|'failed', error, created_at)` registra todo envio. `mailer.idle()` (em `app.locals.mailer`) permite aos testes aguardar; `createApp` aceita `mailer`/`mailTransport` (testes usam transporte falso, sem rede).
+- Transporte: `SMTP_URL` se definido; senão, com `SMTP_PASS`, SMTP em `SMTP_HOST` (padrão `smtp.gmail.com`) / `SMTP_PORT` (465, TLS) / `SMTP_USER`; sem senha, `jsonTransport` (nada sai da máquina) e aviso na inicialização. Remetente `MAIL_FROM`. `MAIL_REDIRECT_TO` entrega tudo nesse endereço, com assunto prefixado `[para: original]`; a tabela guarda o destinatário e assunto originais.
+- `GET /dev/emails` (só com `NODE_ENV !== 'production'`, sem autenticação): últimos 50 `{id, toEmail, subject, reason, jobId, status, error, html, text, createdAt}`, mais recentes primeiro. Usado pela caixa de demonstração `/emails.html`.

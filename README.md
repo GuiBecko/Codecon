@@ -9,7 +9,7 @@ Monólito Node.js: API em Express + SQLite (`better-sqlite3`) e SPA em HTML/CSS/
 
 ## Como rodar
 
-Requisitos: Node.js 20 ou superior.
+Requisitos: Node.js 22.9 ou superior (os scripts usam `--env-file-if-exists=.env`).
 
 ```bash
 npm install
@@ -38,7 +38,27 @@ Testes de API com `node:test` + `supertest`, cada um com um banco SQLite em mem�
 | `PORT` | `3000` | Porta HTTP |
 | `DB_PATH` | `data/app.db` | Caminho do arquivo SQLite (`:memory:` para banco em memória) |
 | `SESSION_SECRET` | segredo de dev | Segredo do cookie de sessão. **Obrigatório** quando `NODE_ENV=production` |
-| `NODE_ENV` | — | Em `production`, exige `SESSION_SECRET` e marca o cookie como `secure` |
+| `NODE_ENV` | — | Em `production`, exige `SESSION_SECRET`, marca o cookie como `secure` e desliga `/api/dev/*` |
+| `SMTP_HOST` | `smtp.gmail.com` | Servidor SMTP |
+| `SMTP_PORT` | `465` | Porta SMTP (TLS direto quando 465) |
+| `SMTP_USER` | `guilherme2becker@gmail.com` | Usuário SMTP |
+| `SMTP_PASS` | — | Senha de app do Gmail. Sem ela (e sem `SMTP_URL`), nenhum e-mail sai da máquina |
+| `SMTP_URL` | — | Opcional: URL SMTP completa que sobrescreve as variáveis acima |
+| `MAIL_FROM` | `Conecta Vagas <guilherme2becker@gmail.com>` | Remetente |
+| `MAIL_REDIRECT_TO` | — | Opcional: entrega todo e-mail neste endereço (assunto prefixado com `[para: original]`) |
+
+`npm start` e `npm run dev` carregam automaticamente um arquivo `.env` local (não versionado). Modelo em [`.env.example`](.env.example).
+
+## E-mails
+
+Ao fechar uma vaga, cada candidato que estava **em análise** e passou a **não selecionado** recebe um e-mail de retorno personalizado:
+
+- **Vaga fechada com contratação** (`POST /api/company/jobs/:id/close`): explica que outra pessoa foi selecionada e dá um feedback baseado no match — % das tecnologias atendidas, quais faltam e uma observação de senioridade quando o nível do perfil difere do da vaga.
+- **Vaga encerrada sem contratação** (`POST /api/company/jobs/:id/cancel`): avisa que não tem relação com o perfil e recomenda até 3 vagas abertas compatíveis.
+
+Envio real via Gmail: crie uma [senha de app](https://myaccount.google.com/apppasswords), copie `.env.example` para `.env` e preencha `SMTP_PASS`. Com `MAIL_REDIRECT_TO` definido, todos os e-mails chegam nesse endereço (útil porque os usuários demo têm e-mails fictícios). Sem `SMTP_PASS`, o servidor avisa na inicialização e os e-mails são apenas registrados.
+
+O envio acontece depois de a transação ser gravada e nunca atrasa nem derruba a resposta: falhas ficam com status `failed` na tabela `emails`. Todos os e-mails (enviados ou não) aparecem na **caixa de demonstração** em [`/emails.html`](http://localhost:3000/emails.html), alimentada por `GET /api/dev/emails` (só fora de produção).
 
 ## Credenciais de demonstração
 
@@ -86,8 +106,9 @@ data/                 # banco SQLite (ignorado pelo git)
 Todas as rotas ficam sob `/api` e respondem JSON; erros vêm como `{ "error": "mensagem" }`.
 
 - `POST /auth/register`, `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`
-- Candidato: `GET|PUT /candidate/profile`, `GET /candidate/applications`, `GET /jobs`, `GET /jobs/:id`, `POST /jobs/:id/apply`
-- Empresa: `POST /company/jobs`, `GET /company/jobs?status=open|closed`, `GET /company/jobs/:id/applications`, `POST /company/jobs/:id/close`
+- Candidato: `GET|PUT /candidate/profile`, `GET /candidate/applications`, `GET /jobs`, `GET /jobs/matches`, `GET /jobs/:id`, `POST /jobs/:id/apply`
+- Empresa: `POST /company/jobs`, `GET /company/jobs?status=open|closed`, `GET /company/jobs/:id/applications`, `POST /company/jobs/:id/close`, `POST /company/jobs/:id/cancel`
+- Demonstração (fora de produção): `GET /dev/emails`
 - Qualquer usuário logado: `GET /meta/filters`
 
 Detalhes em [`docs/superpowers/specs/2026-10-06-plataforma-vagas-design.md`](docs/superpowers/specs/2026-10-06-plataforma-vagas-design.md).

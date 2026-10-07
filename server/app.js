@@ -10,6 +10,8 @@ import { candidateRouter } from './routes/candidate.js';
 import { jobsRouter } from './routes/jobs.js';
 import { companyRouter } from './routes/company.js';
 import { metaRouter } from './routes/meta.js';
+import { devRouter } from './routes/dev.js';
+import { createMailer } from './mailer.js';
 
 const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
@@ -28,6 +30,8 @@ export function createApp({
   db,
   sessionSecret = process.env.SESSION_SECRET,
   uploadsDir = process.env.UPLOADS_DIR || 'data/uploads',
+  mailer,
+  mailTransport,
 } = {}) {
   const isProd = process.env.NODE_ENV === 'production';
   if (!sessionSecret) {
@@ -38,7 +42,10 @@ export function createApp({
   uploadsDir = path.resolve(uploadsDir);
   fs.mkdirSync(uploadsDir, { recursive: true });
 
+  mailer = mailer ?? createMailer({ db, transport: mailTransport });
+
   const app = express();
+  app.locals.mailer = mailer;
   app.set('trust proxy', 1);
   app.use(express.json({ limit: '100kb' }));
   app.use(session({
@@ -51,8 +58,9 @@ export function createApp({
   app.use('/api/auth', authRouter(db));
   app.use('/api/candidate', candidateRouter(db, uploadsDir));
   app.use('/api/jobs', jobsRouter(db));
-  app.use('/api/company', companyRouter(db, uploadsDir));
+  app.use('/api/company', companyRouter(db, uploadsDir, mailer));
   app.use('/api/meta', metaRouter(db));
+  if (!isProd) app.use('/api/dev', devRouter(db));
   app.use('/api', (req, res) => {
     res.status(404).json({ error: 'Rota não encontrada' });
   });

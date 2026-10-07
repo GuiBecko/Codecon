@@ -11,16 +11,22 @@ process.on('exit', () => {
   for (const dir of tempDirs) fs.rmSync(dir, { recursive: true, force: true });
 });
 
-export function setup() {
+// Transporte falso: os testes nunca acessam a rede.
+export function fakeTransport() {
+  const sent = [];
+  return { sent, sendMail: async (mail) => { sent.push(mail); return { messageId: String(sent.length) }; } };
+}
+
+export function setup({ mailTransport = fakeTransport() } = {}) {
   const db = createDb(':memory:');
   const uploadsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'conecta-vagas-uploads-'));
   tempDirs.add(uploadsDir);
-  const app = createApp({ db, sessionSecret: 'test', uploadsDir });
+  const app = createApp({ db, sessionSecret: 'test', uploadsDir, mailTransport });
   const cleanup = () => {
     fs.rmSync(uploadsDir, { recursive: true, force: true });
     tempDirs.delete(uploadsDir);
   };
-  return { db, app, uploadsDir, cleanup };
+  return { db, app, uploadsDir, cleanup, mailTransport, mailer: app.locals.mailer };
 }
 
 let counter = 0;
