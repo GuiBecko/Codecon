@@ -30,7 +30,9 @@ const CANDIDATES = [
     email: 'ana@demo.com',
     fullName: 'Ana Souza',
     phone: '(11) 98765-4321',
-    city: 'São Paulo - SP',
+    city: 'São Paulo',
+    state: 'SP',
+    country: 'Brasil',
     linkedin: 'https://www.linkedin.com/in/ana-souza-demo',
     seniority: 'pleno',
     technologies: ['javascript', 'typescript', 'react', 'node'],
@@ -41,33 +43,51 @@ const CANDIDATES = [
         cargo: 'Desenvolvedora Full Stack',
         inicio: '2022-03',
         fim: '',
+        atual: true,
         descricao: 'Desenvolvimento de dashboards em React e APIs REST em Node.js.',
+      },
+      {
+        empresa: 'Agência Digital SP',
+        cargo: 'Desenvolvedora Front-end Júnior',
+        inicio: '2020-06',
+        fim: '2022-02',
+        atual: false,
+        descricao: 'Criação de landing pages e componentes React para clientes de varejo.',
       },
     ],
     education: [
-      { instituicao: 'Universidade Federal do ABC', curso: 'Ciência da Computação', conclusao: '2021-12' },
+      {
+        instituicao: 'Universidade Federal do ABC', curso: 'Ciência da Computação', conclusao: '2021-12',
+        situacao: 'concluido',
+      },
     ],
   },
   {
     email: 'bruno@demo.com',
     fullName: 'Bruno Lima',
-    phone: '(31) 99876-5432',
-    city: 'Belo Horizonte - MG',
+    phone: '(81) 99876-5432',
+    city: 'Recife',
+    state: 'PE',
+    country: 'Brasil',
     linkedin: 'https://www.linkedin.com/in/bruno-lima-demo',
     seniority: 'junior',
     technologies: ['python', 'django', 'sql'],
     summary: 'Desenvolvedor backend em início de carreira, apaixonado por Python e dados.',
     experiences: [
       {
-        empresa: 'Agência Mineira',
+        empresa: 'Agência Manguebeat',
         cargo: 'Estagiário de Desenvolvimento',
         inicio: '2023-02',
         fim: '2024-08',
+        atual: false,
         descricao: 'Manutenção de sistemas internos em Django.',
       },
     ],
     education: [
-      { instituicao: 'PUC Minas', curso: 'Sistemas de Informação', conclusao: '2024-12' },
+      {
+        instituicao: 'Universidade Federal de Pernambuco', curso: 'Sistemas de Informação', conclusao: '2027-06',
+        situacao: 'em_andamento',
+      },
     ],
   },
 ];
@@ -158,11 +178,11 @@ export function seed(db) {
     const candidateIds = CANDIDATES.map((c) => {
       const id = Number(insertUser.run(c.email, hash, 'candidate').lastInsertRowid);
       db.prepare(`
-        INSERT INTO candidates (user_id, full_name, phone, city, linkedin, seniority, technologies,
-          summary, experiences, education)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO candidates (user_id, full_name, phone, city, state, country, linkedin, seniority,
+          technologies, summary, experiences, education)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
-        id, c.fullName, c.phone, c.city, c.linkedin, c.seniority, c.technologies.join(','),
+        id, c.fullName, c.phone, c.city, c.state, c.country, c.linkedin, c.seniority, c.technologies.join(','),
         c.summary, JSON.stringify(c.experiences), JSON.stringify(c.education),
       );
       return id;

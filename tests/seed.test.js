@@ -4,6 +4,7 @@ import request from 'supertest';
 import { createDb } from '../server/db.js';
 import { createApp } from '../server/app.js';
 import { seed, DEMO_PASSWORD } from '../server/seed.js';
+import { profileFromRow, parseProfileInput } from '../server/profile-model.js';
 
 const count = (db, table) => db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n;
 
@@ -44,4 +45,25 @@ test('ana loga com a senha demo e tem currículo completo', async () => {
   assert.equal((await company.post('/api/auth/login').send({ email: 'rh@technova.com', password: DEMO_PASSWORD })).status, 200);
   const companyJobs = await company.get('/api/company/jobs');
   assert.ok(companyJobs.body.length > 0);
+});
+
+test('currículos do seed já estão no formato validado pelo servidor', () => {
+  const db = createDb(':memory:');
+  seed(db);
+  const rows = db.prepare('SELECT * FROM candidates').all();
+  assert.equal(rows.length, 2);
+  for (const row of rows) {
+    const profile = profileFromRow(row);
+    const { complete, resumePdf, ...input } = profile;
+    assert.equal(complete, true);
+    assert.equal(resumePdf, null);
+    assert.deepEqual(parseProfileInput(input), input, row.full_name);
+  }
+  const ana = profileFromRow(rows.find((r) => r.full_name === 'Ana Souza'));
+  assert.equal(ana.state, 'SP');
+  assert.deepEqual(ana.experiences[0].atual, true);
+  assert.equal(ana.experiences[0].fim, '');
+  const bruno = profileFromRow(rows.find((r) => r.full_name === 'Bruno Lima'));
+  assert.equal(bruno.state, 'PE');
+  assert.equal(bruno.education[0].situacao, 'em_andamento');
 });
