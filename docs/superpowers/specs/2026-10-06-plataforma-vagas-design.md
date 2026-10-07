@@ -142,3 +142,37 @@ Front: validação manual seguindo o roteiro de demo do README.
 
 - `npm start` — produção; `npm run dev` — `node --watch`; `npm run seed` — recria dados de demo (3 empresas, ~10 vagas variadas, 2 candidatos com currículo; senha padrão documentada no README); `npm test`.
 - README com: como rodar, credenciais de demo e roteiro de demo (empresa cria vaga → candidato filtra e se candidata → empresa fecha vaga → candidato vê "Aprovado").
+
+## 9. Extensões (2026-10-06)
+
+### Dados do candidato
+Novas colunas em `candidates`: `state`, `country` (padrão `'Brasil'`), `resume_pdf_path`, `resume_pdf_name`, `resume_pdf_size`, `resume_pdf_uploaded_at`. `createDb` aplica uma migração idempotente (`PRAGMA table_info` + `ALTER TABLE ADD COLUMN`), então bancos antigos são atualizados no restart.
+
+`GET/PUT /candidate/profile` passam a incluir `state`, `country` e `resumePdf: null | {name, size, uploadedAt}` (este último só leitura).
+
+### Regras de validação (`server/contact.js`, `server/profile-model.js`)
+- **País:** texto ≤ 60; vazio → `Brasil`. É Brasil quando, sem acento/caixa, vale `brasil` ou `brazil`.
+- **Estado:** no Brasil, vazio ou uma das 27 UFs (entrada sem distinção de caixa, gravada em maiúsculas) — senão 400 `Estado inválido`. Fora do Brasil, texto livre ≤ 60.
+- **Telefone:** opcional. Brasil: 10 ou 11 dígitos (aceita prefixo `+55`/`55`), gravado como `(11) 98888-1111` / `(11) 3888-1111`; senão 400 `Telefone inválido. Use DDD + número, ex.: (11) 98888-1111`. Exterior: `^\+?[\d\s().-]+$` com 8–15 dígitos; senão 400 `Telefone inválido`.
+- **LinkedIn:** opcional. Aceita `linkedin.com/in/<slug>` (com/sem protocolo, subdomínio `www.`/`br.`, barra final ou query) ou só o slug (`[A-Za-z0-9_%-]{3,100}`); gravado como `https://www.linkedin.com/in/<slug>`; senão 400 `LinkedIn inválido. Use linkedin.com/in/seu-perfil`.
+- **Experiências:** `{empresa, cargo, inicio, fim, descricao, atual}`; `atual` booleano (aceita `'true'/'false'`), quando verdadeiro `fim = ''`. Datas `AAAA-MM` (400 `Data inválida (use AAAA-MM)`); `fim >= inicio` (400 `A data de fim deve ser posterior ao início`).
+- **Formação:** `{instituicao, curso, conclusao, situacao}`; `conclusao` em `AAAA-MM` (previsão, se em andamento); `situacao` ∈ `concluido | em_andamento` (padrão `concluido`).
+- Registros antigos sem `atual`/`situacao` são lidos com os padrões.
+
+### PDF do currículo
+Upload via `multer` em memória, limite 5 MB, assinatura `%PDF-` obrigatória. Arquivo salvo como `<UPLOADS_DIR>/<uuid>.pdf` (padrão `data/uploads`, fora do git); o banco guarda só o nome UUID, e nenhum caminho é montado a partir de entrada do usuário.
+
+| Método | Rota | Notas |
+|---|---|---|
+| PUT | `/candidate/resume-pdf` | multipart, campo `file`; 200 com o perfil; 400 `Envie um arquivo PDF válido`; 413 `O PDF deve ter no máximo 5 MB`; substitui (e apaga) o anterior |
+| GET | `/candidate/resume-pdf` | `application/pdf` + `Content-Disposition: attachment`; 404 `Nenhum PDF anexado` |
+| DELETE | `/candidate/resume-pdf` | 204 |
+| GET | `/company/applications/:id/resume-pdf` | empresa dona da vaga; 403 outra empresa; 404 candidatura inexistente ou sem PDF |
+
+### Ajustes
+- `GET /company/jobs/:id/applications`: `candidate` traz também `email` e `resumePdf`.
+- `POST /jobs/:id/apply`: ordem das checagens 404 → 409 (já candidatado) → 400 (vaga fechada) → 422 (currículo incompleto).
+- Bibliotecas de navegador servidas em `/vendor/pdfjs` (`pdfjs-dist/build`) e `/vendor/jspdf` (`jspdf/dist`).
+
+### Frontend
+O frontend importa dados de um currículo em PDF com heurísticas sobre o texto extraído pelo pdf.js e exporta o currículo em PDF com jsPDF.
